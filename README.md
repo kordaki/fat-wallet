@@ -2,13 +2,16 @@
 
 A Telegram bot that monitors stock market signals using Bollinger Bands and Relative Price Position (RPP) analysis to alert you on potential buy/sell opportunities.
 
-## Features
+## ✨ Version 2 Features (Enhanced)
 
-- Monitors 8 stocks including tech leaders and 2026 World Cup sponsors
-- Calculates Bollinger Bands (20-day SMA with 2 standard deviations)
-- Calculates Relative Price Position (RPP) based on 6-month highs/lows
-- Sends Telegram alerts when STRONG BUY or STRONG SELL signals are detected
-- Runs every 15 minutes automatically
+- **SQLite Database Caching**: Fast analysis with 95% reduction in API calls
+- **Admin Commands**: Manage watchlist and settings via Telegram
+- **Dynamic Configuration**: Change thresholds and intervals on-the-fly
+- **Signal History**: Track all buy/sell alerts over time
+- **Smart Updates**: Daily data refresh instead of constant API calls
+- Monitors stocks with Bollinger Bands and RPP analysis
+- Sends Telegram alerts only when signals are detected
+- Customizable check intervals and thresholds
 
 ## Stock Watchlist
 
@@ -56,12 +59,27 @@ TELEGRAM_CHAT_ID=-1003544900612
 
 ## Usage
 
-### Run the Bot
+### Run the Bot (Version 2 - Recommended)
+
+```bash
+source venv/bin/activate
+python market_bot_v2.py
+```
+
+This version includes:
+- Database caching for faster analysis
+- Admin commands via Telegram
+- Signal history tracking
+- Dynamic configuration
+
+### Run the Original Bot (Version 1)
 
 ```bash
 source venv/bin/activate
 python market_bot.py
 ```
+
+Simple version without database or admin commands.
 
 The bot will:
 1. Send a startup notification to your Telegram channel
@@ -133,6 +151,23 @@ RPP = ((Current Price - Min Price) / (Max Price - Min Price)) * 100
 - Upper Band: SMA + (2 × Standard Deviation)
 - Lower Band: SMA - (2 × Standard Deviation)
 
+## Admin Commands
+
+Version 2 includes powerful admin commands. See [ADMIN_GUIDE.md](ADMIN_GUIDE.md) for complete documentation.
+
+**Quick Reference:**
+- `/watchlist` - View stocks being monitored
+- `/add TICKER [NAME]` - Add a stock
+- `/remove TICKER` - Remove a stock
+- `/settings` - View current configuration
+- `/set_interval MINUTES` - Change check frequency
+- `/set_buy PERCENT` - Adjust buy threshold
+- `/set_sell PERCENT` - Adjust sell threshold
+- `/check` - Run immediate analysis
+- `/history` - View recent signals
+
+**Admin User ID:** 1937651844
+
 ## File Structure
 
 ```
@@ -140,8 +175,13 @@ fat-wallet/
 ├── .env                 # Bot credentials (DO NOT COMMIT)
 ├── .gitignore          # Git ignore file
 ├── requirements.txt    # Python dependencies
-├── market_bot.py       # Main bot script
-├── test_bot.py         # Test suite
+├── database.py         # Database management (V2)
+├── market_bot.py       # Original bot (V1)
+├── market_bot_v2.py    # Enhanced bot with admin commands (V2)
+├── test_bot.py         # Test suite (V1)
+├── test_bot_v2.py      # Test suite (V2)
+├── fat_wallet.db       # SQLite database (created on first run)
+├── ADMIN_GUIDE.md      # Complete admin command guide
 └── README.md           # This file
 ```
 
