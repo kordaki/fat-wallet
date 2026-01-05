@@ -188,7 +188,9 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message += "/set\\_interval MINUTES - Set check interval\n"
     message += "/set\\_buy PERCENT - Set buy threshold\n"
     message += "/set\\_sell PERCENT - Set sell threshold\n"
+    message += "/set\\_cooldown HOURS - Set signal cooldown\n"
     message += "/check - Run immediate check\n"
+    message += "/check\\_force - Force check (ignore cooldown)\n"
     message += "/history - View recent signals"
 
     await update.message.reply_text(message, parse_mode='Markdown')
@@ -260,12 +262,21 @@ async def cmd_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     interval = int(db.get_config('check_interval'))
     buy_threshold = db.get_config('rpp_buy_threshold')
     sell_threshold = db.get_config('rpp_sell_threshold')
+    cooldown_hours = float(db.get_config('signal_cooldown_hours'))
+    price_change = db.get_config('price_change_threshold')
 
     message = "⚙️ *Current Settings*\n\n"
     message += f"🕐 Check Interval: *{interval // 60} minutes*\n"
     message += f"📉 Buy Threshold: *< {buy_threshold}%*\n"
-    message += f"📈 Sell Threshold: *> {sell_threshold}%*\n\n"
-    message += "Use /set\\_interval, /set\\_buy, or /set\\_sell to modify"
+    message += f"📈 Sell Threshold: *> {sell_threshold}%*\n"
+
+    if cooldown_hours == 0:
+        message += f"⏱️ Signal Cooldown: *Disabled*\n"
+    else:
+        message += f"⏱️ Signal Cooldown: *{cooldown_hours} hours*\n"
+
+    message += f"💹 Price Change Alert: *{price_change}%*\n\n"
+    message += "Use /set\\_interval, /set\\_buy, /set\\_sell, or /set\\_cooldown to modify"
 
     await update.message.reply_text(message, parse_mode='Markdown')
 
@@ -351,8 +362,45 @@ async def cmd_check(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text("🔄 Running immediate check...")
-    await check_all_stocks(context.bot)
+    await check_all_stocks(context.bot, force=False)
     await update.message.reply_text("✅ Check completed")
+
+
+async def cmd_check_force(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /check_force command - run check ignoring cooldown."""
+    if not is_admin(update.effective_user.id):
+        return
+
+    await update.message.reply_text("🔄 Running FORCED check (ignoring cooldown)...")
+    await check_all_stocks(context.bot, force=True)
+    await update.message.reply_text("✅ Forced check completed")
+
+
+async def cmd_set_cooldown(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /set_cooldown command."""
+    if not is_admin(update.effective_user.id):
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /set_cooldown HOURS\n\nSet to 0 to disable cooldown (never repeat same signal)")
+        return
+
+    try:
+        hours = float(context.args[0])
+        if hours < 0:
+            raise ValueError()
+
+        db.set_config('signal_cooldown_hours', hours)
+
+        if hours == 0:
+            message = "✅ Cooldown disabled - signals will only be sent once (until they flip)"
+        else:
+            message = f"✅ Signal cooldown updated to *{hours} hours*"
+
+        await update.message.reply_text(message, parse_mode='Markdown')
+
+    except ValueError:
+        await update.message.reply_text("❌ Please provide a valid number of hours (0 or greater)")
 
 
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -376,10 +424,12 @@ async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(message, parse_mode='Markdown')
 
 
-async def check_all_stocks(bot):
+async def check_all_stocks(bot, force=False):
     """Check all stocks in the watchlist and send alerts if signals are detected."""
     print(f"\n{'='*60}")
     print(f"Checking stocks at {datetime.now()}")
+    if force:
+        print("FORCED CHECK - Ignoring cooldown")
     print(f"{'='*60}")
 
     watchlist = db.get_watchlist()
@@ -390,19 +440,30 @@ async def check_all_stocks(bot):
         analysis = analyze_stock(ticker)
 
         if analysis:
-            print(f"  ✓ {analysis['signal']} signal detected!")
-
-            # Save to history
-            db.save_signal(
+            # Check if we should send this signal (deduplication)
+            should_send, reason = db.should_send_signal(
                 ticker,
                 analysis['signal'],
                 analysis['current_price'],
-                analysis['rpp_score']
+                force=force
             )
 
-            # Send alert
-            message = format_signal_message(analysis)
-            await send_telegram_message(message, bot)
+            if should_send:
+                print(f"  ✓ {analysis['signal']} signal detected! ({reason})")
+
+                # Save to history
+                db.save_signal(
+                    ticker,
+                    analysis['signal'],
+                    analysis['current_price'],
+                    analysis['rpp_score']
+                )
+
+                # Send alert
+                message = format_signal_message(analysis)
+                await send_telegram_message(message, bot)
+            else:
+                print(f"  ~ {analysis['signal']} signal skipped ({reason})")
         else:
             print(f"  - No signal")
 
@@ -471,7 +532,9 @@ def main():
     application.add_handler(CommandHandler("set_interval", cmd_set_interval))
     application.add_handler(CommandHandler("set_buy", cmd_set_buy))
     application.add_handler(CommandHandler("set_sell", cmd_set_sell))
+    application.add_handler(CommandHandler("set_cooldown", cmd_set_cooldown))
     application.add_handler(CommandHandler("check", cmd_check))
+    application.add_handler(CommandHandler("check_force", cmd_check_force))
     application.add_handler(CommandHandler("history", cmd_history))
 
     # Start bot

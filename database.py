@@ -77,7 +77,9 @@ def init_database():
             ('check_interval', '900'),
             ('rpp_buy_threshold', '10'),
             ('rpp_sell_threshold', '90'),
-            ('admin_user_id', '1937651844')
+            ('admin_user_id', '1937651844'),
+            ('signal_cooldown_hours', '24'),
+            ('price_change_threshold', '5')
         ]
 
         for key, value in default_config:
@@ -267,3 +269,57 @@ def get_signal_history(ticker=None, days=30):
             cursor = conn.execute(query, (cutoff_date,))
 
         return cursor.fetchall()
+
+
+def get_last_signal(ticker):
+    """Get the most recent signal for a ticker."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT signal_type, price, created_at
+            FROM signal_history
+            WHERE ticker = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', (ticker,))
+        return cursor.fetchone()
+
+
+def should_send_signal(ticker, signal_type, current_price, force=False):
+    """
+    Determine if a signal should be sent based on deduplication rules.
+
+    Returns: (should_send: bool, reason: str)
+    """
+    if force:
+        return True, "Forced check - ignoring cooldown"
+
+    last_signal = get_last_signal(ticker)
+
+    # Rule 1: First time signal - always send
+    if not last_signal:
+        return True, "First time signal"
+
+    last_type, last_price, last_time_str = last_signal
+    last_time = datetime.strptime(last_time_str, '%Y-%m-%d %H:%M:%S')
+    hours_since = (datetime.now() - last_time).total_seconds() / 3600
+
+    # Rule 2: Signal flipped (BUY→SELL or SELL→BUY) - always send
+    if last_type != signal_type:
+        return True, f"Signal flipped from {last_type} to {signal_type}"
+
+    # Get configuration
+    cooldown_hours = float(get_config('signal_cooldown_hours') or 24)
+    price_change_threshold = float(get_config('price_change_threshold') or 5)
+
+    # Rule 3: Cooldown period passed - send reminder
+    if cooldown_hours > 0 and hours_since >= cooldown_hours:
+        return True, f"Cooldown period passed ({hours_since:.1f}h >= {cooldown_hours}h)"
+
+    # Rule 4: Significant price change - send update
+    price_change_pct = abs((current_price - last_price) / last_price * 100)
+    if price_change_pct >= price_change_threshold:
+        return True, f"Significant price change ({price_change_pct:.1f}% >= {price_change_threshold}%)"
+
+    # Rule 5: Same signal, within cooldown, similar price - skip
+    return False, f"Duplicate signal (sent {hours_since:.1f}h ago, price change {price_change_pct:.1f}%)"

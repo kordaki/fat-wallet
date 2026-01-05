@@ -168,10 +168,31 @@ Change the RPP sell threshold (0-100).
 
 ---
 
+#### `/set_cooldown HOURS`
+Change the signal cooldown period to prevent duplicate alerts.
+
+**Examples:**
+```
+/set_cooldown 24    # Repeat same signal after 24 hours
+/set_cooldown 12    # Repeat after 12 hours (more frequent reminders)
+/set_cooldown 0     # Never repeat same signal (only when it flips)
+```
+
+**Response:**
+```
+✅ Signal cooldown updated to 24 hours
+```
+
+**Note:** Even with cooldown enabled, signals will ALWAYS be sent if:
+- Signal flips (BUY → SELL or SELL → BUY)
+- Price changes significantly (>5% by default)
+
+---
+
 ### Manual Actions
 
 #### `/check`
-Trigger an immediate check of all stocks (doesn't wait for the next scheduled check).
+Trigger an immediate check of all stocks. Respects the cooldown period.
 
 **Example:**
 ```
@@ -183,6 +204,24 @@ Trigger an immediate check of all stocks (doesn't wait for the next scheduled ch
 🔄 Running immediate check...
 ✅ Check completed
 ```
+
+---
+
+#### `/check_force`
+Trigger an immediate check and send ALL current signals, ignoring the cooldown period.
+
+**Example:**
+```
+/check_force
+```
+
+**Response:**
+```
+🔄 Running FORCED check (ignoring cooldown)...
+✅ Forced check completed
+```
+
+**Use case:** When you want to see all current market conditions regardless of recent alerts.
 
 ---
 
@@ -199,6 +238,87 @@ Trigger an immediate check of all stocks (doesn't wait for the next scheduled ch
 - **Lower = Less Conservative**: A threshold of 85% means sell when the price is in the top 15%
 
 **Recommended:** 90-95% for strong sell signals
+
+---
+
+## Understanding Signal Deduplication
+
+The bot includes smart signal deduplication to prevent spam. Here's how it works:
+
+### When Signals ARE Sent
+
+1. **First Time Signal** ✅
+   - Stock has never triggered this signal before
+   - Always sent
+
+2. **Signal Flipped** ✅
+   - Previous signal was BUY, now it's SELL (or vice versa)
+   - Indicates market reversal
+   - Always sent
+
+3. **Cooldown Period Passed** ✅
+   - Same signal, but cooldown time has elapsed (default: 24 hours)
+   - Serves as a daily reminder
+   - Configurable with `/set_cooldown`
+
+4. **Significant Price Change** ✅
+   - Same signal, but price moved >5% since last alert
+   - Indicates situation is evolving
+   - Always sent
+
+5. **Forced Check** ✅
+   - You used `/check_force` command
+   - Bypasses all cooldown rules
+   - Always sent
+
+### When Signals ARE NOT Sent
+
+**Duplicate Signal** ❌
+- Same signal type (e.g., STRONG BUY)
+- Within cooldown period (default: 24 hours)
+- Price hasn't changed significantly (<5%)
+- Prevents channel spam
+
+### Example Scenario
+
+```
+Day 1, 10:00 AM - AAPL triggers STRONG BUY at $240
+→ ✅ Alert sent (first time)
+
+Day 1, 10:15 AM - AAPL still STRONG BUY at $241
+→ ❌ Skipped (duplicate, <1% price change)
+
+Day 1, 2:00 PM - AAPL still STRONG BUY at $254
+→ ✅ Alert sent (5.8% price increase)
+
+Day 1, 6:00 PM - AAPL now STRONG SELL at $268
+→ ✅ Alert sent (signal flipped)
+
+Day 2, 10:00 AM - AAPL still STRONG SELL at $270
+→ ✅ Alert sent (24h cooldown passed)
+```
+
+### Configuring Cooldown
+
+**Never repeat (until flip):**
+```
+/set_cooldown 0
+```
+
+**Hourly reminders:**
+```
+/set_cooldown 1
+```
+
+**Daily reminders (default):**
+```
+/set_cooldown 24
+```
+
+**Weekly reminders:**
+```
+/set_cooldown 168
+```
 
 ---
 

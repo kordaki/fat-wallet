@@ -5,6 +5,7 @@ A Telegram bot that monitors stock market signals using Bollinger Bands and Rela
 ## ✨ Version 2 Features (Enhanced)
 
 - **SQLite Database Caching**: Fast analysis with 95% reduction in API calls
+- **Smart Signal Deduplication**: Prevents duplicate alerts, only notifies on important changes
 - **Admin Commands**: Manage watchlist and settings via Telegram
 - **Dynamic Configuration**: Change thresholds and intervals on-the-fly
 - **Signal History**: Track all buy/sell alerts over time
