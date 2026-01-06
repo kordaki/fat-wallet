@@ -106,6 +106,34 @@ This will verify:
 
 Press `Ctrl+C` to stop the bot gracefully.
 
+## Deployment
+
+### Deploy to Railway (Recommended)
+
+1. Push code to GitHub
+2. Create account at [Railway.app](https://railway.app)
+3. Create new project from GitHub repo
+4. Add environment variables:
+   - `TELEGRAM_BOT_TOKEN`
+   - `TELEGRAM_CHAT_ID`
+   - `RAILWAY_VOLUME_MOUNT_PATH` = `/data`
+5. Add Volume:
+   - Go to Settings → Volumes
+   - Add new volume with mount path `/data`
+6. Deploy automatically!
+
+**Cost:** Free (included in $5/month credit)
+
+See [RENDER_DEPLOYMENT.md](RENDER_DEPLOYMENT.md) for detailed deployment guide.
+
+### Database Persistence
+
+The bot uses SQLite database that needs persistent storage:
+
+- **Local:** Database stored in project folder
+- **Railway:** Stored in mounted volume at `/data`
+- **Automatic backups:** Use Railway's snapshot feature
+
 ## Customization
 
 ### Change Check Interval
@@ -160,11 +188,14 @@ Version 2 includes powerful admin commands. See [ADMIN_GUIDE.md](ADMIN_GUIDE.md)
 - `/watchlist` - View stocks being monitored
 - `/add TICKER [NAME]` - Add a stock
 - `/remove TICKER` - Remove a stock
+- `/analyze TICKER` - Analyze any stock instantly (new!)
 - `/settings` - View current configuration
 - `/set_interval MINUTES` - Change check frequency
 - `/set_buy PERCENT` - Adjust buy threshold
 - `/set_sell PERCENT` - Adjust sell threshold
-- `/check` - Run immediate analysis
+- `/set_cooldown HOURS` - Set signal cooldown period (new!)
+- `/check` - Run immediate analysis (respects cooldown)
+- `/check_force` - Force check ignoring cooldown (new!)
 - `/history` - View recent signals
 
 **Admin User ID:** 1937651844
@@ -173,17 +204,23 @@ Version 2 includes powerful admin commands. See [ADMIN_GUIDE.md](ADMIN_GUIDE.md)
 
 ```
 fat-wallet/
-├── .env                 # Bot credentials (DO NOT COMMIT)
-├── .gitignore          # Git ignore file
-├── requirements.txt    # Python dependencies
-├── database.py         # Database management (V2)
-├── market_bot.py       # Original bot (V1)
-├── market_bot_v2.py    # Enhanced bot with admin commands (V2)
-├── test_bot.py         # Test suite (V1)
-├── test_bot_v2.py      # Test suite (V2)
-├── fat_wallet.db       # SQLite database (created on first run)
-├── ADMIN_GUIDE.md      # Complete admin command guide
-└── README.md           # This file
+├── .env                      # Bot credentials (DO NOT COMMIT)
+├── .gitignore               # Git ignore file
+├── requirements.txt         # Python dependencies
+├── Procfile                 # Railway deployment config
+├── runtime.txt              # Python version for Railway
+├── railway.json             # Railway settings
+├── database.py              # Database management (V2)
+├── market_bot.py            # Original bot (V1)
+├── market_bot_v2.py         # Enhanced bot with admin commands (V2)
+├── test_bot.py              # Test suite (V1)
+├── test_bot_v2.py           # Test suite (V2)
+├── test_deduplication.py    # Deduplication test suite
+├── fat_wallet.db            # SQLite database (created on first run)
+├── ADMIN_GUIDE.md           # Complete admin command guide
+├── QUICKSTART.md            # Quick start guide
+├── DEDUPLICATION_SUMMARY.md # Signal deduplication docs
+└── README.md                # This file
 ```
 
 ## Troubleshooting
