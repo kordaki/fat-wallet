@@ -184,6 +184,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message += "/watchlist - View current watchlist\n"
     message += "/add TICKER NAME - Add stock to watchlist\n"
     message += "/remove TICKER - Remove stock from watchlist\n"
+    message += "/analyze TICKER - Analyze any stock instantly\n"
     message += "/settings - View current settings\n"
     message += "/set\\_interval MINUTES - Set check interval\n"
     message += "/set\\_buy PERCENT - Set buy threshold\n"
@@ -403,6 +404,101 @@ async def cmd_set_cooldown(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Please provide a valid number of hours (0 or greater)")
 
 
+async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /analyze command - analyze a specific stock on demand."""
+    if not is_admin(update.effective_user.id):
+        return
+
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /analyze TICKER\n\nExample: /analyze TSLA")
+        return
+
+    ticker = context.args[0].upper()
+
+    await update.message.reply_text(f"🔍 Analyzing *{ticker}*...", parse_mode='Markdown')
+
+    # Run analysis
+    analysis = analyze_stock(ticker)
+
+    # Get thresholds for context
+    rpp_buy = float(db.get_config('rpp_buy_threshold'))
+    rpp_sell = float(db.get_config('rpp_sell_threshold'))
+
+    if analysis:
+        # Stock has a signal
+        signal_type = analysis['signal']
+        emoji = "🟢" if signal_type == "STRONG BUY" else "🔴"
+
+        message = f"{emoji} *{ticker} - {signal_type}*\n\n"
+        message += f"💰 Current Price: ${analysis['current_price']:.2f}\n"
+        message += f"📊 RPP Score: {analysis['rpp_score']:.2f}%\n\n"
+        message += f"📈 Bollinger Bands:\n"
+        message += f"   Upper: ${analysis['upper_band']:.2f}\n"
+        message += f"   Middle: ${analysis['middle_band']:.2f}\n"
+        message += f"   Lower: ${analysis['lower_band']:.2f}\n\n"
+        message += f"⚡ Triggers:\n"
+        for trigger in analysis['triggers']:
+            message += f"   • {trigger}\n"
+        message += f"\n🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+    else:
+        # No signal - show neutral analysis
+        df = fetch_and_cache_stock_data(ticker)
+
+        if df is None or df.empty:
+            await update.message.reply_text(f"❌ Could not fetch data for *{ticker}*\n\nPlease check the ticker symbol.", parse_mode='Markdown')
+            return
+
+        rpp_score, current_price = calculate_rpp(df)
+        upper_band, middle_band, lower_band, _ = calculate_bollinger_bands(df)
+
+        if rpp_score is None or lower_band is None:
+            await update.message.reply_text(f"❌ Insufficient data to analyze *{ticker}*", parse_mode='Markdown')
+            return
+
+        # Determine status
+        if current_price < lower_band:
+            bb_status = "Below Lower Band (Oversold)"
+            bb_emoji = "📉"
+        elif current_price > upper_band:
+            bb_status = "Above Upper Band (Overbought)"
+            bb_emoji = "📈"
+        else:
+            bb_status = "Within Bands (Normal)"
+            bb_emoji = "➡️"
+
+        if rpp_score < rpp_buy:
+            rpp_status = f"Near Low ({rpp_score:.1f}% < {rpp_buy}%)"
+        elif rpp_score > rpp_sell:
+            rpp_status = f"Near High ({rpp_score:.1f}% > {rpp_sell}%)"
+        else:
+            rpp_status = f"Mid-Range ({rpp_score:.1f}%)"
+
+        message = f"ℹ️ *{ticker} - No Signal*\n\n"
+        message += f"💰 Current Price: ${current_price:.2f}\n"
+        message += f"📊 RPP Score: {rpp_score:.2f}%\n"
+        message += f"   Status: {rpp_status}\n\n"
+        message += f"📈 Bollinger Bands:\n"
+        message += f"   Upper: ${upper_band:.2f}\n"
+        message += f"   Middle: ${middle_band:.2f}\n"
+        message += f"   Lower: ${lower_band:.2f}\n"
+        message += f"   {bb_emoji} Status: {bb_status}\n\n"
+        message += f"💡 *Why No Signal?*\n"
+
+        if current_price >= lower_band and rpp_score >= rpp_buy:
+            message += f"   • Price not oversold enough\n"
+            message += f"   • RPP not low enough for BUY\n"
+        elif current_price <= upper_band and rpp_score <= rpp_sell:
+            message += f"   • Price not overbought enough\n"
+            message += f"   • RPP not high enough for SELL\n"
+        else:
+            message += f"   • Both conditions not met\n"
+
+        message += f"\n🕐 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+
+    await update.message.reply_text(message, parse_mode='Markdown')
+
+
 async def cmd_history(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /history command."""
     if not is_admin(update.effective_user.id):
@@ -528,6 +624,7 @@ def main():
     application.add_handler(CommandHandler("watchlist", cmd_watchlist))
     application.add_handler(CommandHandler("add", cmd_add))
     application.add_handler(CommandHandler("remove", cmd_remove))
+    application.add_handler(CommandHandler("analyze", cmd_analyze))
     application.add_handler(CommandHandler("settings", cmd_settings))
     application.add_handler(CommandHandler("set_interval", cmd_set_interval))
     application.add_handler(CommandHandler("set_buy", cmd_set_buy))
