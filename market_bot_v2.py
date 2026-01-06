@@ -109,17 +109,41 @@ def analyze_stock(ticker):
     signal = None
     trigger = []
 
-    # STRONG BUY conditions
-    if current_price < lower_band and rpp_score < rpp_buy:
+    # Check buy conditions
+    price_oversold = current_price < lower_band
+    rpp_low = rpp_score < rpp_buy
+
+    # Check sell conditions
+    price_overbought = current_price > upper_band
+    rpp_high = rpp_score > rpp_sell
+
+    # STRONG BUY - Both conditions met
+    if price_oversold and rpp_low:
         signal = 'STRONG BUY'
         trigger.append(f'Price below Lower Bollinger Band (${lower_band:.2f})')
         trigger.append(f'RPP Score ({rpp_score:.2f}%) < {rpp_buy}%')
 
-    # STRONG SELL conditions
-    elif current_price > upper_band and rpp_score > rpp_sell:
+    # BUY - Either condition met
+    elif price_oversold or rpp_low:
+        signal = 'BUY'
+        if price_oversold:
+            trigger.append(f'Price below Lower Bollinger Band (${lower_band:.2f})')
+        if rpp_low:
+            trigger.append(f'RPP Score ({rpp_score:.2f}%) < {rpp_buy}%')
+
+    # STRONG SELL - Both conditions met
+    elif price_overbought and rpp_high:
         signal = 'STRONG SELL'
         trigger.append(f'Price above Upper Bollinger Band (${upper_band:.2f})')
         trigger.append(f'RPP Score ({rpp_score:.2f}%) > {rpp_sell}%')
+
+    # SELL - Either condition met
+    elif price_overbought or rpp_high:
+        signal = 'SELL'
+        if price_overbought:
+            trigger.append(f'Price above Upper Bollinger Band (${upper_band:.2f})')
+        if rpp_high:
+            trigger.append(f'RPP Score ({rpp_score:.2f}%) > {rpp_sell}%')
 
     if signal:
         return {
@@ -154,7 +178,17 @@ def format_signal_message(analysis):
     price = analysis['current_price']
     rpp = analysis['rpp_score']
 
-    emoji = "🟢" if signal == "STRONG BUY" else "🔴"
+    # Different emojis for different signal strengths
+    if signal == "STRONG BUY":
+        emoji = "🟢🟢"
+    elif signal == "BUY":
+        emoji = "🟢"
+    elif signal == "STRONG SELL":
+        emoji = "🔴🔴"
+    elif signal == "SELL":
+        emoji = "🔴"
+    else:
+        emoji = "⚪"
 
     message = f"{emoji} *{signal}: {ticker}*\n\n"
     message += f"💰 Current Price: ${price:.2f}\n"
@@ -427,7 +461,18 @@ async def cmd_analyze(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if analysis:
         # Stock has a signal
         signal_type = analysis['signal']
-        emoji = "🟢" if signal_type == "STRONG BUY" else "🔴"
+
+        # Different emojis for different signal strengths
+        if signal_type == "STRONG BUY":
+            emoji = "🟢🟢"
+        elif signal_type == "BUY":
+            emoji = "🟢"
+        elif signal_type == "STRONG SELL":
+            emoji = "🔴🔴"
+        elif signal_type == "SELL":
+            emoji = "🔴"
+        else:
+            emoji = "⚪"
 
         message = f"{emoji} *{ticker} - {signal_type}*\n\n"
         message += f"💰 Current Price: ${analysis['current_price']:.2f}\n"
