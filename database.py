@@ -1,13 +1,16 @@
 """
 Database module for stock data caching and configuration management.
 """
+import os
 import sqlite3
 import pandas as pd
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 
 
-DB_PATH = 'fat_wallet.db'
+# Use Railway's persistent volume if available, otherwise use local path
+DATA_DIR = os.environ.get('RAILWAY_VOLUME_MOUNT_PATH', '.')
+DB_PATH = os.path.join(DATA_DIR, 'fat_wallet.db')
 
 
 @contextmanager
